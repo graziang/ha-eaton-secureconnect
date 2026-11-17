@@ -8,7 +8,8 @@ from homeassistant.loader import async_setup as setup_loader
 from homeassistant.helpers.frame import async_setup as setup_frame
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from custom_components.eaton_secureconnect.model import normalize
-from custom_components.eaton_secureconnect.api import ProbeError
+from custom_components.eaton_secureconnect.api import ProbeError, PanelUnavailableError
+from custom_components.eaton_secureconnect.session import AuthError
 from test_model_session import fixture
 
 @pytest.mark.asyncio
@@ -47,6 +48,23 @@ async def test_real_ha_discovery_events_unavailable_unload(tmp_path):
         fake.read.side_effect=ProbeError('network')
         await c.async_refresh();await hass.async_block_till_done()
         assert all(s.state=='unavailable' for s in hass.states.async_all())
+        # An installer session must not start reauth or stop future polling.
+        with patch.object(ConfigEntry, 'async_start_reauth') as reauth:
+            fake.read.side_effect=PanelUnavailableError('Accesso installatore in corso')
+            await c.async_refresh();await hass.async_block_till_done()
+            assert not c.last_update_success
+            assert entry.state==ConfigEntryState.LOADED
+            reauth.assert_not_called()
+            raw['logs']=[{'id':'2'}, {'id':'1'}]
+            fake.read.side_effect=lambda:normalize(raw)
+            await c.async_refresh();await hass.async_block_till_done()
+            assert c.last_update_success
+            assert all(s.state!='unavailable' for s in hass.states.async_all())
+            assert len(events)==1  # No delayed alarm events replayed on reconnect.
+            reauth.assert_not_called()
+            fake.read.side_effect=AuthError('Credenziali rifiutate')
+            await c.async_refresh();await hass.async_block_till_done()
+            reauth.assert_called_once()
         assert await hass.config_entries.async_unload(entry.entry_id)
         fake.close.assert_called_once()
     finally:

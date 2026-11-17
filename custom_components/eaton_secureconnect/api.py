@@ -33,6 +33,10 @@ class ProbeError(Exception):
     """Only fixed, safe messages; never includes a server response or secrets."""
 
 
+class PanelUnavailableError(ProbeError):
+    """Panel access is temporarily blocked, not an account login failure."""
+
+
 def error_diagnostic(details, content_type, submitted=None):
     """Return categories and a scrubbed short error code, never the error body.
 
@@ -139,6 +143,13 @@ class Client:
             self.last_error = {"http_status": error.code,
                 "operation": "login" if is_login else path,
                 **error_diagnostic(details, error.headers.get('Content-Type', '') if error.headers else '', body)}
+            # The official app treats these 403 responses as panel-access
+            # banners. Keep the JWT: logging in again cannot exit installer mode.
+            if not is_login and error.code == 403:
+                if state == 'installer':
+                    raise PanelUnavailableError('Accesso installatore in corso: letture sospese, ripresa automatica alla chiusura della sessione.') from None
+                if state == 'appAccessDisabled':
+                    raise PanelUnavailableError('Accesso app temporaneamente disabilitato dalla centrale; ripresa automatica quando disponibile.') from None
             if is_pairing and state in ('pinCode.IsNotValid', 'pinCode.IsTimeout'):
                 raise ProbeError(self.last_error['meaning']) from None
             if state == "loginPasswordPairIsNotExists":

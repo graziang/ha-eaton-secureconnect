@@ -59,7 +59,7 @@ def alarm_state(area):
     return {'unset': 'disarmed', 'fullset': 'armed_away'}.get(area.get('state'))
 
 
-def check_command(area, action, zones, faults):
+def check_command(area, action, zones, faults, *, partitions=None):
     if action not in ('fullset', 'unset') or not area:
         raise ProbeError('Comando o area non validi.')
     if area.get('in-alarm') is not False:
@@ -68,10 +68,22 @@ def check_command(area, action, zones, faults):
         raise ProbeError('Stato transitorio o sconosciuto: aggiornare prima di riprovare.')
     if area['state'] == action:
         return False
-    if action == 'fullset' and (faults != [] or not zones or any(
-        z.get('state') != 'closed' or z.get('omitted') is not False for z in zones
-    )):
-        raise ProbeError('Inserimento bloccato: guasti, area vuota o sensori aperti/esclusi/sconosciuti.')
+    if action == 'fullset':
+        # Firmware 5 reports open zones across ALL areas as type 5000.
+        # Their arming condition is checked using the fresh target-area zones,
+        # not by interpreting report IDs or translated UI strings. Unknown or
+        # reset-blocking reports and explicit fault flags remain global blockers.
+        if (not isinstance(faults, list) or any(
+            not isinstance(f, dict) or str(f.get('type')) != '5000'
+            or f.get('prevents-set') is not True
+            or f.get('prevents-reset') is not False for f in faults
+        ) or any(p.get('is-fault') not in (None, False) for p in (partitions or [area]))):
+            raise ProbeError('Inserimento bloccato: guasto centrale o impedimento non classificato. Verificare nell’app Eaton.')
+        if not isinstance(zones, list) or not zones:
+            raise ProbeError('Inserimento bloccato: area senza sensori o elenco sensori non disponibile.')
+        if any(not isinstance(z, dict) or z.get('state') != 'closed'
+               or z.get('omitted') is not False for z in zones):
+            raise ProbeError('Inserimento bloccato: sensori aperti, esclusi o sconosciuti nell’area selezionata.')
     return True
 
 

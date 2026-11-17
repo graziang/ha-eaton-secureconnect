@@ -1,9 +1,9 @@
 import copy
 import json
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import pytest
-from custom_components.eaton_secureconnect.api import ProbeError
+from custom_components.eaton_secureconnect.api import ProbeError, PanelUnavailableError
 from custom_components.eaton_secureconnect.model import normalize, contact_state, fault_state, alarm_state, check_command, EventCursor
 from custom_components.eaton_secureconnect.session import Session, AuthError
 
@@ -108,7 +108,11 @@ def test_auth_renewal_once_and_no_command():
         client.last_error={'http_status':401}
         raise ProbeError('expired')
     client.read_panel.side_effect=failed_read
-    with pytest.raises(AuthError):s.read()
+    with pytest.raises(ProbeError) as error:s.read()
+    assert not isinstance(error.value, AuthError)
+    assert client.login.call_count==2
+    # Repeated coordinator polls do not hammer the login endpoint.
+    with pytest.raises(ProbeError):s.read()
     assert client.login.call_count==2
     client.set_partition.assert_not_called()
 
@@ -118,3 +122,131 @@ def test_network_failure_does_not_relogin():
     client.read_panel.side_effect=ProbeError('network')
     with pytest.raises(ProbeError):s.read()
     assert client.login.call_count==1
+
+
+def open_zone_report():
+    return {'type': '5000', 'prevents-set': True, 'prevents-reset': False}
+
+
+def test_open_zones_in_other_area_do_not_block_closed_target():
+    s, client = session()
+    s.read()
+    client.read_faults.return_value = [open_zone_report()]
+    s.command('1', 'fullset')
+    client.set_partition.assert_called_once_with('synthetic', '1', 'fullset')
+    calls = [c[0] for c in client.method_calls]
+    assert calls.index('read_faults') < calls.index('read_partition_zones') < calls.index('set_partition')
+    # The same reports never permit open/omitted/unknown TARGET zones.
+    for change in ({'state': 'open'}, {'state': 'unknown'}, {'omitted': True}, {'omitted': None}):
+        client.set_partition.reset_mock()
+        client.read_partition_zones.return_value = [{**fixture()['zones'][0], **change}]
+        with pytest.raises(ProbeError, match='area selezionata'):
+            s.command('1', 'fullset')
+        client.set_partition.assert_not_called()
+
+
+@pytest.mark.parametrize('report', [
+    {}, {'type': 'other'}, {'type': '5000'},
+    {**open_zone_report(), 'prevents-reset': True},
+    {**open_zone_report(), 'prevents-set': False},
+])
+def test_unknown_or_global_report_blocks_all_areas(report):
+    s, client = session();s.read()
+    client.read_faults.return_value = [open_zone_report(), report]
+    with pytest.raises(ProbeError, match='guasto centrale'):
+        s.command('1', 'fullset')
+    client.set_partition.assert_not_called()
+
+
+def test_explicit_fault_in_other_area_is_still_global_blocker():
+    s, client = session();s.read()
+    client.read_partitions.return_value = fixture()['partitions'] + [{'id': '2', 'is-fault': True}]
+    with pytest.raises(ProbeError, match='guasto centrale'):
+        s.command('1', 'fullset')
+    client.set_partition.assert_not_called()
+
+
+@pytest.mark.parametrize('code', ['installer', 'appAccessDisabled'])
+def test_panel_access_denied_recovers_without_login(code):
+    s, client = session();s.read()
+    def denied(token):
+        client.last_error = {'http_status': 403, 'server_code': code, 'operation': 'async/system/'}
+        raise PanelUnavailableError('Accesso sospeso')
+    client.read_panel.side_effect = denied
+    for _ in range(3):
+        with pytest.raises(PanelUnavailableError):s.read()
+    client.login.assert_called_once()
+    client.clear.assert_not_called()
+    client.read_panel.side_effect = None
+    client.last_error = None
+    assert s.read()['partitions']['1']['state'] == 'unset'
+    client.login.assert_called_once()
+    client.set_partition.assert_not_called()
+
+
+def test_expired_session_renews_once_and_recovers():
+    s, client = session();s.read()
+    def expired(token):
+        client.last_error = {'http_status': 401, 'operation': 'async/system/'}
+        client.read_panel.side_effect = None
+        raise ProbeError('expired')
+    client.read_panel.side_effect = expired
+    assert s.read()['partitions']['1']['state'] == 'unset'
+    assert client.login.call_count == 2
+    client.set_partition.assert_not_called()
+
+
+def test_repeated_read_rejection_backs_off_then_recovers():
+    s, client = session()
+    def denied(token):
+        client.last_error = {'http_status': 403, 'operation': 'async/system/'}
+        raise ProbeError('denied')
+    client.read_panel.side_effect = denied
+    with patch('custom_components.eaton_secureconnect.session.monotonic') as clock:
+        clock.return_value = 0
+        with pytest.raises(ProbeError) as error:s.read()
+        assert not isinstance(error.value, AuthError)
+        assert client.login.call_count == 2
+        clock.return_value = 59
+        with pytest.raises(ProbeError):s.read()
+        assert client.login.call_count == 2
+        clock.return_value = 60
+        with pytest.raises(ProbeError):s.read()
+        assert client.login.call_count == 4
+        clock.return_value = 179
+        with pytest.raises(ProbeError):s.read()
+        assert client.login.call_count == 4
+        client.read_panel.side_effect = None
+        client.last_error = None
+        clock.return_value = 180
+        assert s.read()['partitions']['1']['state'] == 'unset'
+        assert client.login.call_count == 5
+    client.set_partition.assert_not_called()
+
+
+@pytest.mark.parametrize('diagnostic', [
+    {'http_status': 401, 'operation': 'login'},
+    {'http_status': 400, 'operation': 'login', 'server_code': 'loginPasswordPairIsNotExists'},
+    {'http_status': 403, 'operation': 'login', 'server_code': 'confirmation.needed'},
+])
+def test_confirmed_bad_credentials_still_require_reauth(diagnostic):
+    s, client = session()
+    def rejected(*args):
+        client.last_error = diagnostic
+        raise ProbeError('rejected')
+    client.login.side_effect = rejected
+    with pytest.raises(AuthError):s.read()
+    client.login.assert_called_once()
+    client.set_partition.assert_not_called()
+
+
+@pytest.mark.parametrize('status', [401, 403])
+def test_auth_failure_during_write_never_replays_command(status):
+    s, client = session();s.read()
+    def rejected(*args):
+        client.last_error = {'http_status': status, 'operation': 'async/system/partitions-1/'}
+        raise ProbeError('rejected')
+    client.set_partition.side_effect = rejected
+    with pytest.raises(ProbeError, match='Esito incerto'):s.command('1', 'fullset')
+    client.set_partition.assert_called_once()
+    client.login.assert_called_once()
