@@ -31,6 +31,7 @@ class EatonAlarm(EatonEntity, AlarmControlPanelEntity):
     @property
     def extra_state_attributes(self):
         return {'partition_id': self.item_id, 'raw_state': self.item.get('state'),
+                'is_fault': self.item.get('is-fault'),
                 'controls_enabled': self.coordinator.entry.options.get('enable_controls', False)}
 
     async def async_alarm_arm_away(self, code=None):

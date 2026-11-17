@@ -244,6 +244,7 @@ class Client:
 # Keep only useful diagnostic fields: no server tokens, user identifiers, email,
 # phone numbers, arbitrary unknown fields or server error bodies reach disk/UI.
 SAFE_KEYS = frozenset({"id", "name", "state", "mode", "type", "desc", "timestamp",
+    "ui-string", "prevents-set", "prevents-reset",
     "events", "partitions", "zones", "faults", "logs", "system", "model", "version",
     "firmware", "firmware-version", "in-alarm", "is-fault", "time-to-exit", "omitted",
     "partition", "partition-id", "zone", "zone-id", "status", "open", "ready", "in-use", "partsets"})

@@ -29,6 +29,22 @@ def contact_state(zone):
     return {'open': True, 'closed': False}.get(zone.get('state'))
 
 
+def fault_state(partitions, faults):
+    """Follow the panel's explicit area fault flags, not the fault-list length.
+
+    SecureConnect also returns setting impediments in /faults/. Its own UI
+    renders the area `is-fault` flag. An unrecognised response stays unknown.
+    """
+    flags = [area.get('is-fault') for area in partitions.values()]
+    if any(flag is True for flag in flags):
+        return True
+    if flags and all(flag is False for flag in flags):
+        return False
+    if not faults:
+        return False
+    return None
+
+
 def alarm_state(area):
     if area.get('in-alarm') is True:
         return 'triggered'

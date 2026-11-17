@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock
 import pytest
 from custom_components.eaton_secureconnect.api import ProbeError
-from custom_components.eaton_secureconnect.model import normalize, contact_state, alarm_state, check_command, EventCursor
+from custom_components.eaton_secureconnect.model import normalize, contact_state, fault_state, alarm_state, check_command, EventCursor
 from custom_components.eaton_secureconnect.session import Session, AuthError
 
 
@@ -47,6 +47,18 @@ def test_controls_and_faults():
         with pytest.raises(ProbeError):check_command(area,'fullset',zones,faults)
     area['in-alarm']=True
     with pytest.raises(ProbeError):check_command(area,'unset',[],[])
+
+
+def test_fault_reports_are_not_the_panel_fault_indicator():
+    reports = [{'type': 1, 'ui-string': 'Synthetic setting impediment', 'prevents-set': True}]
+    assert fault_state({'1': {'is-fault': False}}, reports) is False
+    assert fault_state({'1': {'is-fault': True}}, []) is True
+    assert fault_state({'1': {'is-fault': False}, '2': {}}, reports) is None
+    assert fault_state({'1': {}}, reports) is None
+    assert fault_state({'1': {}}, []) is False
+    raw = fixture()
+    raw['faults'] = reports
+    assert normalize(raw)['faults'] == reports
 
 
 def test_event_cursor_baseline_dedup_gap_reconnect():

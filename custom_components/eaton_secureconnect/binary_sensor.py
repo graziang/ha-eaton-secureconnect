@@ -2,7 +2,7 @@
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from .entity import EatonEntity
-from .model import contact_state
+from .model import contact_state, fault_state
 
 async def async_setup_entry(hass, entry, async_add_entities):
     c = entry.runtime_data
@@ -52,9 +52,11 @@ class EatonFault(EatonEntity, BinarySensorEntity):
 
     @property
     def is_on(self):
-        return bool(self.coordinator.data['faults'])
+        return fault_state(self.coordinator.data['partitions'], self.coordinator.data['faults'])
 
     @property
     def extra_state_attributes(self):
         return {'count': len(self.coordinator.data['faults']),
+                'reports': self.coordinator.data['faults'],
+                'area_faults': {key: value.get('is-fault') for key, value in self.coordinator.data['partitions'].items()},
                 'event_gap': self.coordinator.data.get('event_gap', False)}
