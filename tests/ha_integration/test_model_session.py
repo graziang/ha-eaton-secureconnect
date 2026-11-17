@@ -61,6 +61,19 @@ def test_fault_reports_are_not_the_panel_fault_indicator():
     assert normalize(raw)['faults'] == reports
 
 
+def test_firmware5_open_zone_impediments_are_not_faults():
+    areas = {'1': {}, '2': {}}
+    reports = [{'type': '5000', 'prevents-set': True, 'ui-string': 'Synthetic open zone'}]
+    assert fault_state(areas, reports) is False
+    assert fault_state(areas, [{'type': 5000}]) is False
+    assert fault_state(areas, reports + [{'type': 'unexpected'}]) is None
+    assert fault_state({'1': {'is-fault': True}}, reports) is True
+    # Distinguishing the indication must not bypass existing arming checks.
+    raw = fixture()
+    with pytest.raises(ProbeError):
+        check_command(raw['partitions'][0], 'fullset', raw['zones'], reports)
+
+
 def test_event_cursor_baseline_dedup_gap_reconnect():
     c=EventCursor()
     assert c.consume([{'id':'1'}])==[]

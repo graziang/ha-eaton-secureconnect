@@ -40,7 +40,10 @@ def fault_state(partitions, faults):
         return True
     if flags and all(flag is False for flag in flags):
         return False
-    if not faults:
+    # Firmware 5 omits `is-fault`. Code 5000 is a zone-open setting
+    # impediment (prevents-set), not a panel malfunction. Preserve all
+    # reports separately and leave other unclassified reports unknown.
+    if not faults or all(str(report.get('type')) == '5000' for report in faults):
         return False
     return None
 
