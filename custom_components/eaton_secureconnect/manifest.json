@@ -1,0 +1,18 @@
+{
+  "domain": "eaton_secureconnect",
+  "name": "Eaton SecureConnect",
+  "categories": [
+    "security_safety.alarm_systems",
+    "sensors.door_window"
+  ],
+  "codeowners": [
+    "@graziang"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/graziang/ha-eaton-secureconnect",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/graziang/ha-eaton-secureconnect/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,45 @@
+{
+  "title": "Eaton SecureConnect",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Collega Eaton SecureConnect",
+        "description": "Usa l’identità application_id dell’abbinamento dedicato HomeAssistantTest già creato. Non usare il PIN della tastiera. Sensori e aree vengono scoperti automaticamente. Le credenziali saranno conservate da Home Assistant; i token solo in memoria.",
+        "data": {
+          "username": "Email Eaton",
+          "password": "Password Eaton",
+          "application_id": "Identità dell’app dedicata (UUID)",
+          "pairing_name": "Nome abbinamento"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Rinnova l’accesso Eaton",
+        "data": {
+          "username": "Email Eaton",
+          "password": "Password Eaton"
+        }
+      }
+    },
+    "error": {
+      "invalid_identity": "Inserire un UUID valido.",
+      "invalid_auth": "Accesso rifiutato o abbinamento non trovato.",
+      "cannot_connect": "Comunicazione fallita o dati inattesi. Verificare l’app Eaton."
+    },
+    "abort": {
+      "already_configured": "Abbinamento già configurato.",
+      "reauth_successful": "Accesso aggiornato."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni Eaton",
+        "description": "Polling cloud: eventi rapidi possono sfuggire. Abilitando i comandi, gli utenti e le automazioni autorizzati in HA possono inserire/disinserire senza PIN Eaton. Nessun comando viene inviato salvando queste opzioni.",
+        "data": {
+          "poll_interval": "Intervallo aggiornamenti (secondi)",
+          "enable_controls": "Abilita inserimento e disinserimento"
+        }
+      }
+    }
+  }
+}

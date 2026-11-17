@@ -1,0 +1,45 @@
+{
+  "title": "Eaton SecureConnect",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Eaton SecureConnect",
+        "description": "Use the application UUID and name of an existing dedicated SecureConnect pairing. This is not the keypad PIN. Areas and zones are discovered automatically. Home Assistant stores your credentials; session tokens are kept in memory.",
+        "data": {
+          "username": "Eaton email",
+          "password": "Eaton password",
+          "application_id": "Dedicated application UUID",
+          "pairing_name": "Pairing name"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Renew Eaton sign-in",
+        "data": {
+          "username": "Eaton email",
+          "password": "Eaton password"
+        }
+      }
+    },
+    "error": {
+      "invalid_identity": "Enter a valid UUID.",
+      "invalid_auth": "Sign-in rejected or pairing not found.",
+      "cannot_connect": "Communication failed or unexpected data. Check the Eaton app."
+    },
+    "abort": {
+      "already_configured": "This pairing is already configured.",
+      "reauth_successful": "Sign-in updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Eaton options",
+        "description": "Cloud polling can miss brief events. Enabling controls allows authorized HA users and automations to arm/disarm without an additional Eaton PIN. Saving these options does not send alarm commands.",
+        "data": {
+          "poll_interval": "Update interval (seconds)",
+          "enable_controls": "Enable arm and disarm"
+        }
+      }
+    }
+  }
+}
